@@ -238,7 +238,11 @@ impl ModelProviderInfo {
         Ok(headers)
     }
 
-    pub fn to_api_provider(&self, auth_mode: Option<AuthMode>) -> CodexResult<ApiProvider> {
+    pub fn to_api_provider(
+        &self,
+        auth_mode: Option<AuthMode>,
+        custom_provider_url: Option<&str>,
+    ) -> CodexResult<ApiProvider> {
         let default_base_url = if matches!(
             auth_mode,
             Some(
@@ -256,6 +260,7 @@ impl ModelProviderInfo {
         let base_url = self
             .base_url
             .clone()
+            .or_else(|| custom_provider_url.map(String::from))
             .unwrap_or_else(|| default_base_url.to_string());
 
         let headers = self.build_header_map()?;

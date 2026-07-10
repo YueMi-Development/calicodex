@@ -81,7 +81,7 @@ impl OpenAiModelsEndpoint {
             codex_otel::start_global_timer("codex.remote_models.fetch_update.duration_ms", &[]);
         let auth = self.auth().await;
         let auth_mode = auth.as_ref().map(CodexAuth::auth_mode);
-        let api_provider = self.provider_info.to_api_provider(auth_mode)?;
+        let api_provider = self.provider_info.to_api_provider(auth_mode, None)?;
         let api_auth = resolve_provider_auth(auth.as_ref(), &self.provider_info)?;
         let request_url =
             ModelsClient::<ReqwestTransport>::request_url(&api_provider, client_version);

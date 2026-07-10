@@ -84,7 +84,7 @@ impl AmazonBedrockModelProvider {
         let mut api_provider_info = self.info.clone();
         api_provider_info.base_url =
             Some(runtime_base_url(managed_auth.as_ref(), &self.aws).await?);
-        api_provider_info.to_api_provider(/*auth_mode*/ None)
+        api_provider_info.to_api_provider(None, None)
     }
 
     async fn runtime_base_url(&self) -> Result<Option<String>> {
@@ -192,7 +192,7 @@ mod tests {
             ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None);
         api_provider_info.base_url = Some(mantle::base_url(region).expect("supported region"));
         let api_provider = api_provider_info
-            .to_api_provider(/*auth_mode*/ None)
+            .to_api_provider(Some(AuthMode::ApiKey), None)
             .expect("api provider should build");
 
         assert_eq!(

@@ -123,6 +123,13 @@ pub struct LoginApiKeyParams {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
+pub struct LoginCustomProviderParams {
+    pub url: String,
+    pub api_key: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
 pub struct GitDiffToRemoteResponse {
     pub sha: GitSha,
     pub diff: String,

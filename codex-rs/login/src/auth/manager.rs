@@ -158,6 +158,7 @@ impl PartialEq for CodexAuth {
 #[derive(Debug, Clone)]
 pub struct ApiKeyAuth {
     api_key: String,
+    pub custom_provider_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -258,7 +259,11 @@ impl CodexAuth {
             let Some(api_key) = auth_dot_json.openai_api_key.as_deref() else {
                 return Err(std::io::Error::other("API key auth is missing a key."));
             };
-            return Ok(Self::from_api_key(api_key));
+            let custom_provider_url = auth_dot_json.custom_provider_url.clone();
+            return Ok(Self::ApiKey(ApiKeyAuth {
+                api_key: api_key.to_owned(),
+                custom_provider_url,
+            }));
         }
         if auth_mode == AuthMode::AgentIdentity {
             let Some(agent_identity) = auth_dot_json.agent_identity.clone() else {
@@ -712,6 +717,7 @@ impl CodexAuth {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            custom_provider_url: None,
         };
 
         let state = ChatgptAuthState {
@@ -748,6 +754,7 @@ impl CodexAuth {
     pub fn from_api_key(api_key: &str) -> Self {
         Self::ApiKey(ApiKeyAuth {
             api_key: api_key.to_owned(),
+            custom_provider_url: None,
         })
     }
 }
@@ -916,6 +923,33 @@ pub fn login_with_api_key(
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+            custom_provider_url: None,
+    };
+    save_auth(
+        codex_home,
+        &auth_dot_json,
+        auth_credentials_store_mode,
+        keyring_backend_kind,
+    )
+}
+
+/// Writes an `auth.json` that contains the API key and a custom provider URL.
+pub fn login_with_custom_provider(
+    codex_home: &Path,
+    api_key: &str,
+    custom_provider_url: &str,
+    auth_credentials_store_mode: AuthCredentialsStoreMode,
+    keyring_backend_kind: AuthKeyringBackendKind,
+) -> std::io::Result<()> {
+    let auth_dot_json = AuthDotJson {
+        auth_mode: Some(AuthMode::ApiKey),
+        openai_api_key: Some(api_key.to_string()),
+        custom_provider_url: Some(custom_provider_url.to_string()),
+        tokens: None,
+        last_refresh: None,
+        agent_identity: None,
+        personal_access_token: None,
+        bedrock_api_key: None,
     };
     save_auth(
         codex_home,
@@ -949,6 +983,7 @@ pub async fn login_with_access_token(
                 agent_identity: None,
                 personal_access_token: Some(access_token.to_string()),
                 bedrock_api_key: None,
+            custom_provider_url: None,
             }
         }
         CodexAccessToken::AgentIdentityJwt(jwt) => {
@@ -965,6 +1000,7 @@ pub async fn login_with_access_token(
                 agent_identity: Some(AgentIdentityStorage::Jwt(jwt.to_string())),
                 personal_access_token: None,
                 bedrock_api_key: None,
+            custom_provider_url: None,
             }
         }
     };
@@ -1485,6 +1521,7 @@ impl AuthDotJson {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            custom_provider_url: None,
         })
     }
 

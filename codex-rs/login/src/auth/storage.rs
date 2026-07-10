@@ -58,6 +58,12 @@ pub struct AuthDotJson {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bedrock_api_key: Option<BedrockApiKeyAuth>,
+
+    /// Custom OpenAI-compatible API provider base URL.
+    /// When set alongside `openai_api_key`, API requests are routed
+    /// to this URL instead of the default OpenAI endpoint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_provider_url: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]

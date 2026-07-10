@@ -84,6 +84,9 @@ pub(crate) enum SignInState {
     ChatGptSuccess,
     ApiKeyEntry(ApiKeyInputState),
     ApiKeyConfigured,
+    CustomProviderUrlEntry(CustomProviderInputState),
+    CustomProviderApiKeyEntry(CustomProviderInputState),
+    CustomProviderConfigured,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,6 +94,7 @@ pub(crate) enum SignInOption {
     ChatGpt,
     DeviceCode,
     ApiKey,
+    CustomProvider,
 }
 
 const API_KEY_DISABLED_MESSAGE: &str = "API key login is disabled.";
@@ -116,6 +120,12 @@ pub(super) async fn cancel_login_attempt(
 pub(crate) struct ApiKeyInputState {
     value: String,
     prepopulated_from_env: bool,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct CustomProviderInputState {
+    pub url: String,
+    pub api_key: String,
 }
 
 #[derive(Clone)]
@@ -177,6 +187,12 @@ impl KeyboardHandler for AuthModeWidget {
         if self.handle_api_key_entry_key_event(&key_event) {
             return;
         }
+        if self.handle_custom_provider_url_entry_key_event(&key_event) {
+            return;
+        }
+        if self.handle_custom_provider_api_key_entry_key_event(&key_event) {
+            return;
+        }
 
         if keys::MOVE_UP.is_pressed(key_event) {
             self.move_highlight(/*delta*/ -1);
@@ -196,6 +212,10 @@ impl KeyboardHandler for AuthModeWidget {
         }
         if keys::SELECT_THIRD.is_pressed(key_event) {
             self.select_option_by_index(/*index*/ 2);
+            return;
+        }
+        if keys::SELECT_FOURTH.is_pressed(key_event) {
+            self.select_option_by_index(/*index*/ 3);
             return;
         }
         if keys::CONFIRM.is_pressed(key_event) {
@@ -218,7 +238,10 @@ impl KeyboardHandler for AuthModeWidget {
     }
 
     fn handle_paste(&mut self, pasted: String) {
-        let _ = self.handle_api_key_entry_paste(pasted);
+        if self.handle_api_key_entry_paste(pasted.clone()) {
+            return;
+        }
+        let _ = self.handle_custom_provider_paste(&pasted);
     }
 }
 
@@ -266,6 +289,8 @@ impl AuthModeWidget {
                     });
                 }
             }
+            SignInState::CustomProviderUrlEntry(_)
+            | SignInState::CustomProviderApiKeyEntry(_) => {}
             _ => return,
         }
         *sign_in_state = SignInState::PickMode;
@@ -286,13 +311,19 @@ impl AuthModeWidget {
     pub(crate) fn is_api_key_entry_active(&self) -> bool {
         self.sign_in_state
             .read()
-            .is_ok_and(|guard| matches!(&*guard, SignInState::ApiKeyEntry(_)))
+            .is_ok_and(|guard| matches!(&*guard, SignInState::ApiKeyEntry(_)
+                | SignInState::CustomProviderUrlEntry(_)
+                | SignInState::CustomProviderApiKeyEntry(_)))
     }
 
     /// Returns whether the API-key entry field currently contains any text.
     pub(crate) fn api_key_entry_has_text(&self) -> bool {
         self.sign_in_state.read().is_ok_and(
-            |guard| matches!(&*guard, SignInState::ApiKeyEntry(state) if !state.value.is_empty()),
+            |guard| {
+                matches!(&*guard, SignInState::ApiKeyEntry(state) if !state.value.is_empty())
+                    || matches!(&*guard, SignInState::CustomProviderUrlEntry(state) if !state.url.is_empty())
+                    || matches!(&*guard, SignInState::CustomProviderApiKeyEntry(state) if !state.api_key.is_empty())
+            },
         )
     }
 
@@ -320,6 +351,7 @@ impl AuthModeWidget {
         if self.is_api_login_allowed() {
             options.push(SignInOption::ApiKey);
         }
+        options.push(SignInOption::CustomProvider);
         options
     }
 
@@ -332,6 +364,7 @@ impl AuthModeWidget {
         if self.is_api_login_allowed() {
             options.push(SignInOption::ApiKey);
         }
+        options.push(SignInOption::CustomProvider);
         options
     }
 
@@ -375,6 +408,13 @@ impl AuthModeWidget {
                 } else {
                     self.disallow_api_login();
                 }
+            }
+            SignInOption::CustomProvider => {
+                *self.sign_in_state.write().unwrap() = SignInState::CustomProviderUrlEntry(
+                    CustomProviderInputState::default(),
+                );
+                self.set_error(None);
+                self.request_frame.schedule_frame();
             }
         }
     }
@@ -459,6 +499,14 @@ impl AuthModeWidget {
                         option,
                         "Provide your own API key",
                         "Pay for what you use",
+                    ));
+                }
+                SignInOption::CustomProvider => {
+                    lines.extend(create_mode_item(
+                        idx,
+                        option,
+                        "Connect your own API provider",
+                        "Use any OpenAI-compatible API endpoint with your own key",
                     ));
                 }
             }
@@ -767,6 +815,30 @@ impl AuthModeWidget {
         true
     }
 
+    fn handle_custom_provider_paste(&mut self, pasted: &str) -> bool {
+        let trimmed = pasted.trim();
+        if trimmed.is_empty() {
+            return false;
+        }
+
+        let mut guard = self.sign_in_state.write().unwrap();
+        match &mut *guard {
+            SignInState::CustomProviderUrlEntry(state) => {
+                state.url.push_str(trimmed);
+                self.set_error(None);
+            }
+            SignInState::CustomProviderApiKeyEntry(state) => {
+                state.api_key.push_str(trimmed);
+                self.set_error(None);
+            }
+            _ => return false,
+        }
+
+        drop(guard);
+        self.request_frame.schedule_frame();
+        true
+    }
+
     fn start_api_key_entry(&mut self) {
         if !self.is_api_login_allowed() {
             self.disallow_api_login();
@@ -836,6 +908,330 @@ impl AuthModeWidget {
                         value: api_key,
                         prepopulated_from_env: false,
                     });
+                }
+            }
+            request_frame.schedule_frame();
+        });
+        self.request_frame.schedule_frame();
+    }
+
+    fn render_custom_provider_url_entry(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        state: &CustomProviderInputState,
+    ) {
+        let [intro_area, input_area, footer_area] = Layout::vertical([
+            Constraint::Min(4),
+            Constraint::Length(3),
+            Constraint::Min(2),
+        ])
+        .areas(area);
+
+        let intro_lines: Vec<Line> = vec![
+            Line::from(vec![
+                "> ".into(),
+                "Connect your own API provider".bold(),
+            ]),
+            "".into(),
+            Line::from(vec![
+                "  Enter the API endpoint URL for your provider (e.g., ".into(),
+                "https://api.openai.com/v1".cyan().italic(),
+                ").".into(),
+            ]),
+            "".into(),
+        ];
+        Paragraph::new(intro_lines)
+            .wrap(Wrap { trim: false })
+            .render(intro_area, buf);
+
+        let content_line: Line = if state.url.is_empty() {
+            vec!["https://api.openai.com/v1".dim()].into()
+        } else {
+            Line::from(state.url.clone())
+        };
+        Paragraph::new(content_line)
+            .wrap(Wrap { trim: false })
+            .block(
+                Block::default()
+                    .title("Provider URL")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
+            .render(input_area, buf);
+
+        let mut footer_lines: Vec<Line> = vec![
+            Line::from(vec![
+                "  Press ".dim(),
+                self.confirm_binding().into(),
+                " to continue".dim(),
+            ]),
+            Line::from(vec![
+                "  Press ".dim(),
+                self.cancel_binding().into(),
+                " to go back".dim(),
+            ]),
+        ];
+        if let Some(error) = self.error_message() {
+            footer_lines.push("".into());
+            footer_lines.push(error.red().into());
+        }
+        Paragraph::new(footer_lines)
+            .wrap(Wrap { trim: false })
+            .render(footer_area, buf);
+    }
+
+    fn render_custom_provider_api_key_entry(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        state: &CustomProviderInputState,
+    ) {
+        let [intro_area, url_display_area, input_area, footer_area] = Layout::vertical([
+            Constraint::Min(3),
+            Constraint::Length(1),
+            Constraint::Length(3),
+            Constraint::Min(2),
+        ])
+        .areas(area);
+
+        let intro_lines: Vec<Line> = vec![
+            Line::from(vec![
+                "> ".into(),
+                "Enter your API key".bold(),
+            ]),
+            "".into(),
+            "  Paste or type your API key below. It will be stored locally in auth.json.".into(),
+            "".into(),
+        ];
+        Paragraph::new(intro_lines)
+            .wrap(Wrap { trim: false })
+            .render(intro_area, buf);
+
+        Paragraph::new(Line::from(vec![
+            "  Provider: ".dim(),
+            state.url.clone().cyan(),
+        ]))
+        .render(url_display_area, buf);
+
+        let content_line: Line = if state.api_key.is_empty() {
+            vec!["Paste or type your API key".dim()].into()
+        } else {
+            Line::from(state.api_key.clone())
+        };
+        Paragraph::new(content_line)
+            .wrap(Wrap { trim: false })
+            .block(
+                Block::default()
+                    .title("API key")
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
+            .render(input_area, buf);
+
+        let mut footer_lines: Vec<Line> = vec![
+            Line::from(vec![
+                "  Press ".dim(),
+                self.confirm_binding().into(),
+                " to save".dim(),
+            ]),
+            Line::from(vec![
+                "  Press ".dim(),
+                self.cancel_binding().into(),
+                " to go back".dim(),
+            ]),
+        ];
+        if let Some(error) = self.error_message() {
+            footer_lines.push("".into());
+            footer_lines.push(error.red().into());
+        }
+        Paragraph::new(footer_lines)
+            .wrap(Wrap { trim: false })
+            .render(footer_area, buf);
+    }
+
+    fn render_custom_provider_configured(&self, area: Rect, buf: &mut Buffer) {
+        let lines = vec![
+            "✓ Custom API provider configured"
+                .fg(Color::Green)
+                .into(),
+            "".into(),
+            "  Codex will use your custom API provider with the provided key.".into(),
+        ];
+
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
+    fn handle_custom_provider_url_entry_key_event(
+        &mut self,
+        key_event: &KeyEvent,
+    ) -> bool {
+        let mut should_advance: Option<CustomProviderInputState> = None;
+        let mut should_request_frame = false;
+
+        {
+            let mut guard = self.sign_in_state.write().unwrap();
+            if let SignInState::CustomProviderUrlEntry(state) = &mut *guard {
+                if keys::CANCEL.is_pressed(*key_event) {
+                    *guard = SignInState::PickMode;
+                    self.set_error(None);
+                    should_request_frame = true;
+                } else if keys::CONFIRM.is_pressed(*key_event) {
+                    let trimmed = state.url.trim().to_string();
+                    if trimmed.is_empty() {
+                        self.set_error(Some(
+                            "Provider URL cannot be empty".to_string(),
+                        ));
+                        should_request_frame = true;
+                    } else {
+                        let next_state = CustomProviderInputState {
+                            url: trimmed,
+                            api_key: String::new(),
+                        };
+                        should_advance = Some(next_state);
+                    }
+                } else {
+                    match key_event.code {
+                        KeyCode::Backspace => {
+                            state.url.pop();
+                            self.set_error(None);
+                            should_request_frame = true;
+                        }
+                        KeyCode::Char(c)
+                            if key_event.kind == KeyEventKind::Press
+                                && !key_event
+                                    .modifiers
+                                    .contains(KeyModifiers::SUPER)
+                                && !key_event
+                                    .modifiers
+                                    .contains(KeyModifiers::CONTROL)
+                                && !key_event
+                                    .modifiers
+                                    .contains(KeyModifiers::ALT) =>
+                        {
+                            state.url.push(c);
+                            self.set_error(None);
+                            should_request_frame = true;
+                        }
+                        _ => {}
+                    }
+                }
+            } else {
+                return false;
+            }
+        }
+
+        if let Some(next_state) = should_advance {
+            *self.sign_in_state.write().unwrap() =
+                SignInState::CustomProviderApiKeyEntry(next_state);
+            self.request_frame.schedule_frame();
+        } else if should_request_frame {
+            self.request_frame.schedule_frame();
+        }
+        true
+    }
+
+    fn handle_custom_provider_api_key_entry_key_event(
+        &mut self,
+        key_event: &KeyEvent,
+    ) -> bool {
+        let mut should_save: Option<CustomProviderInputState> = None;
+        let mut should_request_frame = false;
+
+        {
+            let mut guard = self.sign_in_state.write().unwrap();
+            if let SignInState::CustomProviderApiKeyEntry(state) = &mut *guard {
+                if keys::CANCEL.is_pressed(*key_event) {
+                    *guard = SignInState::PickMode;
+                    self.set_error(None);
+                    should_request_frame = true;
+                } else if keys::CONFIRM.is_pressed(*key_event) {
+                    let trimmed = state.api_key.trim().to_string();
+                    if trimmed.is_empty() {
+                        self.set_error(Some(
+                            "API key cannot be empty".to_string(),
+                        ));
+                        should_request_frame = true;
+                    } else {
+                        state.api_key = trimmed;
+                        should_save = Some(state.clone());
+                    }
+                } else {
+                    match key_event.code {
+                        KeyCode::Backspace => {
+                            state.api_key.pop();
+                            self.set_error(None);
+                            should_request_frame = true;
+                        }
+                        KeyCode::Char(c)
+                            if key_event.kind == KeyEventKind::Press
+                                && !key_event
+                                    .modifiers
+                                    .contains(KeyModifiers::SUPER)
+                                && !key_event
+                                    .modifiers
+                                    .contains(KeyModifiers::CONTROL)
+                                && !key_event
+                                    .modifiers
+                                    .contains(KeyModifiers::ALT) =>
+                        {
+                            state.api_key.push(c);
+                            self.set_error(None);
+                            should_request_frame = true;
+                        }
+                        _ => {}
+                    }
+                }
+            } else {
+                return false;
+            }
+        }
+
+        if let Some(state) = should_save {
+            self.save_custom_provider(state);
+        } else if should_request_frame {
+            self.request_frame.schedule_frame();
+        }
+        true
+    }
+
+    fn save_custom_provider(&mut self, state: CustomProviderInputState) {
+        self.set_error(None);
+        let request_handle = self.app_server_request_handle.clone();
+        let sign_in_state = self.sign_in_state.clone();
+        let error = self.error.clone();
+        let request_frame = self.request_frame.clone();
+        tokio::spawn(async move {
+            match request_handle
+                .request_typed::<LoginAccountResponse>(ClientRequest::LoginAccount {
+                    request_id: onboarding_request_id(),
+                    params: LoginAccountParams::CustomProvider {
+                        url: state.url.clone(),
+                        api_key: state.api_key.clone(),
+                    },
+                })
+                .await
+            {
+                Ok(LoginAccountResponse::CustomProvider {}) => {
+                    *error.write().unwrap() = None;
+                    *sign_in_state.write().unwrap() = SignInState::CustomProviderConfigured;
+                }
+                Ok(other) => {
+                    *error.write().unwrap() = Some(format!(
+                        "Unexpected account/login/start response: {other:?}"
+                    ));
+                    *sign_in_state.write().unwrap() =
+                        SignInState::CustomProviderApiKeyEntry(state);
+                }
+                Err(err) => {
+                    *error.write().unwrap() =
+                        Some(format!("Failed to save custom provider: {err}"));
+                    *sign_in_state.write().unwrap() =
+                        SignInState::CustomProviderApiKeyEntry(state);
                 }
             }
             request_frame.schedule_frame();
@@ -970,8 +1366,12 @@ impl StepStateProvider for AuthModeWidget {
             | SignInState::ApiKeyEntry(_)
             | SignInState::ChatGptContinueInBrowser(_)
             | SignInState::ChatGptDeviceCode(_)
-            | SignInState::ChatGptSuccessMessage => StepState::InProgress,
-            SignInState::ChatGptSuccess | SignInState::ApiKeyConfigured => StepState::Complete,
+            | SignInState::ChatGptSuccessMessage
+            | SignInState::CustomProviderUrlEntry(_)
+            | SignInState::CustomProviderApiKeyEntry(_) => StepState::InProgress,
+            SignInState::ChatGptSuccess
+            | SignInState::ApiKeyConfigured
+            | SignInState::CustomProviderConfigured => StepState::Complete,
         }
     }
 }
@@ -1000,6 +1400,15 @@ impl WidgetRef for AuthModeWidget {
             }
             SignInState::ApiKeyConfigured => {
                 self.render_api_key_configured(area, buf);
+            }
+            SignInState::CustomProviderUrlEntry(state) => {
+                self.render_custom_provider_url_entry(area, buf, state);
+            }
+            SignInState::CustomProviderApiKeyEntry(state) => {
+                self.render_custom_provider_api_key_entry(area, buf, state);
+            }
+            SignInState::CustomProviderConfigured => {
+                self.render_custom_provider_configured(area, buf);
             }
         }
     }

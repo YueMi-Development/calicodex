@@ -110,6 +110,18 @@ pub enum LoginAccountParams {
     #[serde(rename = "amazonBedrock", rename_all = "camelCase")]
     #[ts(rename = "amazonBedrock", rename_all = "camelCase")]
     AmazonBedrock { api_key: String, region: String },
+    /// Connect to a custom OpenAI-compatible API provider.
+    #[experimental("account/login/start.customProvider")]
+    #[serde(rename = "customProvider", rename_all = "camelCase")]
+    #[ts(rename = "customProvider", rename_all = "camelCase")]
+    CustomProvider {
+        /// The base URL of the custom API provider.
+        url: String,
+        /// The API key for the custom provider.
+        #[serde(rename = "apiKey")]
+        #[ts(rename = "apiKey")]
+        api_key: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
@@ -156,6 +168,9 @@ pub enum LoginAccountResponse {
     #[serde(rename = "amazonBedrock", rename_all = "camelCase")]
     #[ts(rename = "amazonBedrock", rename_all = "camelCase")]
     AmazonBedrock {},
+    #[serde(rename = "customProvider", rename_all = "camelCase")]
+    #[ts(rename = "customProvider", rename_all = "camelCase")]
+    CustomProvider {},
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

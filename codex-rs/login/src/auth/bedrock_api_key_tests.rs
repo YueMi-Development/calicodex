@@ -20,6 +20,7 @@ fn api_key_auth() -> AuthDotJson {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+            custom_provider_url: None,
     }
 }
 

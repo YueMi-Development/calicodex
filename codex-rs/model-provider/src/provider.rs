@@ -156,8 +156,12 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
     fn api_provider(&self) -> ModelProviderFuture<'_, codex_protocol::error::Result<Provider>> {
         Box::pin(async move {
             let auth = self.auth().await;
+            let custom_provider_url = match auth.as_ref() {
+                Some(CodexAuth::ApiKey(api_key)) => api_key.custom_provider_url.as_deref(),
+                _ => None,
+            };
             self.info()
-                .to_api_provider(auth.as_ref().map(CodexAuth::auth_mode))
+                .to_api_provider(auth.as_ref().map(CodexAuth::auth_mode), custom_provider_url)
         })
     }
 

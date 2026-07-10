@@ -571,6 +571,11 @@ impl ChatWidget {
             return;
         }
 
+        if cmd == SlashCommand::Model {
+            self.handle_model_subcommand(trimmed);
+            return;
+        }
+
         if cmd == SlashCommand::Goal {
             self.dispatch_prepared_command_with_args(
                 cmd,
@@ -648,6 +653,82 @@ impl ChatWidget {
             remote_image_urls,
             text_elements,
             mention_bindings,
+        }
+    }
+
+    /// Handle `/model add <id> <name>`, `/model remove <id>`, `/model list`.
+    fn handle_model_subcommand(&mut self, args: &str) {
+        self.bottom_pane.drain_pending_submission_state();
+        self.bottom_pane
+            .set_composer_text(String::new(), Vec::new(), Vec::new());
+        let parts: Vec<&str> = args.splitn(3, ' ').collect();
+        let cmd = *parts.first().unwrap_or(&"");
+
+        match cmd {
+            "add" if parts.len() >= 3 => {
+                let id = parts[1].to_string();
+                let name = parts[2].trim_matches('"').to_string();
+                let home = match &self.config.codex_home.to_path_buf() {
+                    h => h.clone(),
+                };
+                let entry = crate::custom_models::CustomModelEntry {
+                    id: id.clone(),
+                    display_name: name,
+                    description: String::new(),
+                };
+                match crate::custom_models::add_custom_model(&home, entry) {
+                    Ok(models) => {
+                        self.add_info_message(
+                            format!("Added model '{id}'. Total custom models: {}", models.len()),
+                            None,
+                        );
+                    }
+                    Err(e) => {
+                        self.add_error_message(format!("Failed to add model: {e}"));
+                    }
+                }
+            }
+            "remove" if parts.len() >= 2 => {
+                let id = parts[1].to_string();
+                let home = &self.config.codex_home.to_path_buf();
+                match crate::custom_models::remove_custom_model(home, &id) {
+                    Ok(_) => {
+                        self.add_info_message(format!("Removed model '{id}'."), None);
+                    }
+                    Err(e) => {
+                        self.add_error_message(format!("Failed to remove model: {e}"));
+                    }
+                }
+            }
+            "list" => {
+                let home = &self.config.codex_home.to_path_buf();
+                let models = crate::custom_models::load_custom_models(home);
+                if models.is_empty() {
+                    self.add_info_message(
+                        "No custom models configured.".to_string(),
+                        Some("Use /model add <id> <name> to add one.".to_string()),
+                    );
+                } else {
+                    let model_list: String = models
+                        .iter()
+                        .map(|m| format!("  - {} ({})", m.display_name, m.id))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    self.add_info_message(
+                        format!("Custom models:\n{model_list}"),
+                        None,
+                    );
+                }
+            }
+            _ => {
+                self.add_info_message(
+                    "Custom model management".to_string(),
+                    Some(
+                        "Usage:\n  /model add <id> <name>  Add a model\n  /model remove <id>  Remove a model\n  /model list          List custom models"
+                            .to_string(),
+                    ),
+                );
+            }
         }
     }
 

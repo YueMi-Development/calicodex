@@ -296,6 +296,13 @@ impl AccountRequestProcessor {
             LoginAccountParams::AmazonBedrock { .. } => {
                 return Err(invalid_request("Amazon Bedrock login is not implemented"));
             }
+            LoginAccountParams::CustomProvider { url, api_key } => {
+                self.login_custom_provider_v2(
+                    request_id,
+                    LoginCustomProviderParams { url, api_key },
+                )
+                .await;
+            }
         }
         Ok(())
     }
@@ -350,6 +357,57 @@ impl AccountRequestProcessor {
             .login_api_key_common(&params)
             .await
             .map(|()| LoginAccountResponse::ApiKey {});
+        let logged_in = result.is_ok();
+        self.outgoing.send_result(request_id, result).await;
+
+        if logged_in {
+            self.send_login_success_notifications(/*login_id*/ None)
+                .await;
+        }
+    }
+
+    async fn login_custom_provider_common(
+        &self,
+        params: &LoginCustomProviderParams,
+    ) -> std::result::Result<(), JSONRPCErrorError> {
+        if self.auth_manager.is_external_chatgpt_auth_active() {
+            return Err(self.external_auth_active_error());
+        }
+
+        // Cancel any active login attempt.
+        {
+            let mut guard = self.active_login.lock().await;
+            if let Some(active) = guard.take() {
+                drop(active);
+            }
+        }
+
+        match login_with_custom_provider(
+            &self.config.codex_home,
+            &params.api_key,
+            &params.url,
+            self.config.cli_auth_credentials_store_mode,
+            self.config.auth_keyring_backend_kind(),
+        ) {
+            Ok(()) => {
+                self.auth_manager.reload().await;
+                Ok(())
+            }
+            Err(err) => Err(internal_error(format!(
+                "failed to save custom provider credentials: {err}"
+            ))),
+        }
+    }
+
+    async fn login_custom_provider_v2(
+        &self,
+        request_id: ConnectionRequestId,
+        params: LoginCustomProviderParams,
+    ) {
+        let result = self
+            .login_custom_provider_common(&params)
+            .await
+            .map(|()| LoginAccountResponse::CustomProvider {});
         let logged_in = result.is_ok();
         self.outgoing.send_result(request_id, result).await;
 
