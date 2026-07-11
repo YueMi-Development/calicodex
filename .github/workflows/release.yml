@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  RUST_MIN_STACK: 8388608
+
 jobs:
   build-and-release:
     name: Build & Release - ${{ matrix.target }}

@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  RUST_MIN_STACK: 8388608
+
 jobs:
   test:
     name: Test - ${{ matrix.os }}
