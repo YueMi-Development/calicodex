@@ -121,5 +121,6 @@ jobs:
           files: |
             calicodex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
             dist/${{ matrix.target }}/calicodex-setup-${{ github.ref_name }}-${{ matrix.target }}.exe
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

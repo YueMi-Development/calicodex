@@ -125,6 +125,7 @@ members = [
     "codex-experimental-api-macros",
     "plugin",
     "model-provider",
+    "windows-sandbox-rs",
 ]
 resolver = "2"
 
