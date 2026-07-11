@@ -710,10 +710,7 @@ impl ChatWidget {
                         .map(|m| format!("  - {} ({})", m.display_name, m.id))
                         .collect::<Vec<_>>()
                         .join("\n");
-                    self.add_info_message(
-                        format!("Custom models:\n{model_list}"),
-                        None,
-                    );
+                    self.add_info_message(format!("Custom models:\n{model_list}"), None);
                 }
             }
             _ => {

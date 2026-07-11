@@ -289,8 +289,7 @@ impl AuthModeWidget {
                     });
                 }
             }
-            SignInState::CustomProviderUrlEntry(_)
-            | SignInState::CustomProviderApiKeyEntry(_) => {}
+            SignInState::CustomProviderUrlEntry(_) | SignInState::CustomProviderApiKeyEntry(_) => {}
             _ => return,
         }
         *sign_in_state = SignInState::PickMode;
@@ -309,11 +308,14 @@ impl AuthModeWidget {
 
     /// Returns whether the auth flow is currently in API-key entry mode.
     pub(crate) fn is_api_key_entry_active(&self) -> bool {
-        self.sign_in_state
-            .read()
-            .is_ok_and(|guard| matches!(&*guard, SignInState::ApiKeyEntry(_)
-                | SignInState::CustomProviderUrlEntry(_)
-                | SignInState::CustomProviderApiKeyEntry(_)))
+        self.sign_in_state.read().is_ok_and(|guard| {
+            matches!(
+                &*guard,
+                SignInState::ApiKeyEntry(_)
+                    | SignInState::CustomProviderUrlEntry(_)
+                    | SignInState::CustomProviderApiKeyEntry(_)
+            )
+        })
     }
 
     /// Returns whether the API-key entry field currently contains any text.
@@ -410,9 +412,8 @@ impl AuthModeWidget {
                 }
             }
             SignInOption::CustomProvider => {
-                *self.sign_in_state.write().unwrap() = SignInState::CustomProviderUrlEntry(
-                    CustomProviderInputState::default(),
-                );
+                *self.sign_in_state.write().unwrap() =
+                    SignInState::CustomProviderUrlEntry(CustomProviderInputState::default());
                 self.set_error(None);
                 self.request_frame.schedule_frame();
             }
@@ -929,10 +930,7 @@ impl AuthModeWidget {
         .areas(area);
 
         let intro_lines: Vec<Line> = vec![
-            Line::from(vec![
-                "> ".into(),
-                "Connect your own API provider".bold(),
-            ]),
+            Line::from(vec!["> ".into(), "Connect your own API provider".bold()]),
             "".into(),
             Line::from(vec![
                 "  Enter the API endpoint URL for your provider (e.g., ".into(),
@@ -997,10 +995,7 @@ impl AuthModeWidget {
         .areas(area);
 
         let intro_lines: Vec<Line> = vec![
-            Line::from(vec![
-                "> ".into(),
-                "Enter your API key".bold(),
-            ]),
+            Line::from(vec!["> ".into(), "Enter your API key".bold()]),
             "".into(),
             "  Paste or type your API key below. It will be stored locally in auth.json.".into(),
             "".into(),
@@ -1054,9 +1049,7 @@ impl AuthModeWidget {
 
     fn render_custom_provider_configured(&self, area: Rect, buf: &mut Buffer) {
         let lines = vec![
-            "✓ Custom API provider configured"
-                .fg(Color::Green)
-                .into(),
+            "✓ Custom API provider configured".fg(Color::Green).into(),
             "".into(),
             "  Codex will use your custom API provider with the provided key.".into(),
         ];
@@ -1066,10 +1059,7 @@ impl AuthModeWidget {
             .render(area, buf);
     }
 
-    fn handle_custom_provider_url_entry_key_event(
-        &mut self,
-        key_event: &KeyEvent,
-    ) -> bool {
+    fn handle_custom_provider_url_entry_key_event(&mut self, key_event: &KeyEvent) -> bool {
         let mut should_advance: Option<CustomProviderInputState> = None;
         let mut should_request_frame = false;
 
@@ -1083,9 +1073,7 @@ impl AuthModeWidget {
                 } else if keys::CONFIRM.is_pressed(*key_event) {
                     let trimmed = state.url.trim().to_string();
                     if trimmed.is_empty() {
-                        self.set_error(Some(
-                            "Provider URL cannot be empty".to_string(),
-                        ));
+                        self.set_error(Some("Provider URL cannot be empty".to_string()));
                         should_request_frame = true;
                     } else {
                         let next_state = CustomProviderInputState {
@@ -1103,15 +1091,9 @@ impl AuthModeWidget {
                         }
                         KeyCode::Char(c)
                             if key_event.kind == KeyEventKind::Press
-                                && !key_event
-                                    .modifiers
-                                    .contains(KeyModifiers::SUPER)
-                                && !key_event
-                                    .modifiers
-                                    .contains(KeyModifiers::CONTROL)
-                                && !key_event
-                                    .modifiers
-                                    .contains(KeyModifiers::ALT) =>
+                                && !key_event.modifiers.contains(KeyModifiers::SUPER)
+                                && !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
                         {
                             state.url.push(c);
                             self.set_error(None);
@@ -1135,10 +1117,7 @@ impl AuthModeWidget {
         true
     }
 
-    fn handle_custom_provider_api_key_entry_key_event(
-        &mut self,
-        key_event: &KeyEvent,
-    ) -> bool {
+    fn handle_custom_provider_api_key_entry_key_event(&mut self, key_event: &KeyEvent) -> bool {
         let mut should_save: Option<CustomProviderInputState> = None;
         let mut should_request_frame = false;
 
@@ -1152,9 +1131,7 @@ impl AuthModeWidget {
                 } else if keys::CONFIRM.is_pressed(*key_event) {
                     let trimmed = state.api_key.trim().to_string();
                     if trimmed.is_empty() {
-                        self.set_error(Some(
-                            "API key cannot be empty".to_string(),
-                        ));
+                        self.set_error(Some("API key cannot be empty".to_string()));
                         should_request_frame = true;
                     } else {
                         state.api_key = trimmed;
@@ -1169,15 +1146,9 @@ impl AuthModeWidget {
                         }
                         KeyCode::Char(c)
                             if key_event.kind == KeyEventKind::Press
-                                && !key_event
-                                    .modifiers
-                                    .contains(KeyModifiers::SUPER)
-                                && !key_event
-                                    .modifiers
-                                    .contains(KeyModifiers::CONTROL)
-                                && !key_event
-                                    .modifiers
-                                    .contains(KeyModifiers::ALT) =>
+                                && !key_event.modifiers.contains(KeyModifiers::SUPER)
+                                && !key_event.modifiers.contains(KeyModifiers::CONTROL)
+                                && !key_event.modifiers.contains(KeyModifiers::ALT) =>
                         {
                             state.api_key.push(c);
                             self.set_error(None);
@@ -1224,14 +1195,12 @@ impl AuthModeWidget {
                     *error.write().unwrap() = Some(format!(
                         "Unexpected account/login/start response: {other:?}"
                     ));
-                    *sign_in_state.write().unwrap() =
-                        SignInState::CustomProviderApiKeyEntry(state);
+                    *sign_in_state.write().unwrap() = SignInState::CustomProviderApiKeyEntry(state);
                 }
                 Err(err) => {
                     *error.write().unwrap() =
                         Some(format!("Failed to save custom provider: {err}"));
-                    *sign_in_state.write().unwrap() =
-                        SignInState::CustomProviderApiKeyEntry(state);
+                    *sign_in_state.write().unwrap() = SignInState::CustomProviderApiKeyEntry(state);
                 }
             }
             request_frame.schedule_frame();
