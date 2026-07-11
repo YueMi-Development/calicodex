@@ -20,7 +20,7 @@ fn api_key_auth() -> AuthDotJson {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
-            custom_provider_url: None,
+        custom_provider_url: None,
     }
 }
 
@@ -28,6 +28,7 @@ fn bedrock_only_auth() -> AuthDotJson {
     AuthDotJson {
         auth_mode: None,
         openai_api_key: None,
+        custom_provider_url: None,
         tokens: None,
         last_refresh: None,
         agent_identity: None,
@@ -72,6 +73,7 @@ async fn login_with_bedrock_api_key_replaces_openai_auth() -> anyhow::Result<()>
     let expected = AuthDotJson {
         auth_mode: Some(AuthMode::BedrockApiKey),
         openai_api_key: None,
+        custom_provider_url: None,
         tokens: None,
         last_refresh: None,
         agent_identity: None,

@@ -50,7 +50,7 @@ pub(crate) fn save_custom_models(
     let contents = serde_json::to_string_pretty(&CustomModelsFile {
         models: models.to_vec(),
     })
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    .map_err(std::io::Error::other)?;
     std::fs::write(&path, contents)
 }
 

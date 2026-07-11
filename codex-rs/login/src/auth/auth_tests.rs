@@ -907,7 +907,7 @@ fn logout_removes_auth_file() -> Result<(), std::io::Error> {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
-            custom_provider_url: None,
+        custom_provider_url: None,
     };
     super::save_auth(
         dir.path(),

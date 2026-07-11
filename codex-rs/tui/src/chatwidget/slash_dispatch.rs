@@ -656,21 +656,17 @@ impl ChatWidget {
         }
     }
 
-    /// Handle `/model add <id> <name>`, `/model remove <id>`, `/model list`.
     fn handle_model_subcommand(&mut self, args: &str) {
         self.bottom_pane.drain_pending_submission_state();
         self.bottom_pane
             .set_composer_text(String::new(), Vec::new(), Vec::new());
         let parts: Vec<&str> = args.splitn(3, ' ').collect();
         let cmd = *parts.first().unwrap_or(&"");
-
         match cmd {
             "add" if parts.len() >= 3 => {
                 let id = parts[1].to_string();
                 let name = parts[2].trim_matches('"').to_string();
-                let home = match &self.config.codex_home.to_path_buf() {
-                    h => h.clone(),
-                };
+                let home = self.config.codex_home.to_path_buf();
                 let entry = crate::custom_models::CustomModelEntry {
                     id: id.clone(),
                     display_name: name,

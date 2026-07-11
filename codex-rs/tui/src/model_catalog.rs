@@ -2,7 +2,6 @@ use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
 use std::convert::Infallible;
-use std::path::Path;
 
 use crate::custom_models::load_custom_models;
 
@@ -15,6 +14,7 @@ pub(crate) struct ModelCatalog {
 }
 
 impl ModelCatalog {
+    #[allow(dead_code)]
     pub(crate) fn new(models: Vec<ModelPreset>) -> Self {
         Self {
             models,

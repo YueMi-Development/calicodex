@@ -214,6 +214,7 @@ async fn chatgpt_auth_tokens_for_tests(codex_home: &Path) -> CodexAuth {
     let auth_dot_json = codex_login::AuthDotJson {
         auth_mode: Some(AuthMode::ChatgptAuthTokens),
         openai_api_key: None,
+        custom_provider_url: None,
         tokens: Some(TokenData {
             id_token: codex_login::token_data::parse_chatgpt_jwt_claims(
                 "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.\
