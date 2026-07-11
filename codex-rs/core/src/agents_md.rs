@@ -34,6 +34,10 @@ use std::io;
 use toml::Value as TomlValue;
 use tracing::error;
 
+/// Default filename scanned for CALICO.md instructions.
+pub const DEFAULT_CALICO_MD_FILENAME: &str = "CALICO.md";
+/// Preferred local override for CALICO.md instructions.
+pub const LOCAL_CALICO_MD_FILENAME: &str = "CALICO.override.md";
 /// Default filename scanned for AGENTS.md instructions.
 pub const DEFAULT_AGENTS_MD_FILENAME: &str = "AGENTS.md";
 /// Preferred local override for AGENTS.md instructions.
@@ -232,7 +236,9 @@ async fn agents_md_paths(
 }
 
 fn candidate_filenames(config: &Config) -> Vec<&str> {
-    let mut names: Vec<&str> = Vec::with_capacity(2 + config.project_doc_fallback_filenames.len());
+    let mut names: Vec<&str> = Vec::with_capacity(4 + config.project_doc_fallback_filenames.len());
+    names.push(LOCAL_CALICO_MD_FILENAME);
+    names.push(DEFAULT_CALICO_MD_FILENAME);
     names.push(LOCAL_AGENTS_MD_FILENAME);
     names.push(DEFAULT_AGENTS_MD_FILENAME);
     for candidate in &config.project_doc_fallback_filenames {

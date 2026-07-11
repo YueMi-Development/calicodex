@@ -1,5 +1,5 @@
-Generate a file named AGENTS.md that serves as a contributor guide for this repository.
-Before writing, check whether AGENTS.md already exists in the current working directory. If it does, do not overwrite or modify it.
+Generate a file named CALICO.md that serves as a contributor guide for this repository.
+Before writing, check whether CALICO.md or AGENTS.md already exists in the current working directory. If either does, do not overwrite or modify them.
 Your goal is to produce a clear, concise, and well-structured document with descriptive headings and actionable explanations for each section.
 Follow the outline below, but adapt as needed — add sections if relevant, and omit those that do not apply to this project.
 

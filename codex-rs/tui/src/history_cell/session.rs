@@ -170,7 +170,7 @@ pub(crate) fn new_session_info(
             Line::from(vec![
                 "  ".into(),
                 "/init".into(),
-                " - create an AGENTS.md file with instructions for Codex".dim(),
+                " - create an CALICO.md file with instructions".dim(),
             ]),
             Line::from(vec![
                 "  ".into(),

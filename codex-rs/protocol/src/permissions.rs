@@ -613,7 +613,10 @@ impl FileSystemSandboxPolicy {
 
         append_default_read_only_project_root_subpath_if_no_explicit_rule(&mut entries, ".git");
         append_default_read_only_project_root_subpath_if_no_explicit_rule(&mut entries, ".agents");
-        append_default_read_only_project_root_subpath_if_no_explicit_rule(&mut entries, ".calicodex");
+        append_default_read_only_project_root_subpath_if_no_explicit_rule(
+            &mut entries,
+            ".calicodex",
+        );
         for writable_root in writable_roots {
             for protected_path in default_read_only_subpaths_for_writable_root(
                 writable_root,

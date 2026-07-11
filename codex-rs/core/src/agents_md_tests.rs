@@ -1629,6 +1629,19 @@ async fn apps_feature_does_not_append_to_agents_md_user_instructions() {
     assert_eq!(res, "base doc");
 }
 
+#[tokio::test]
+async fn calico_md_is_prioritized_over_agents_md() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    fs::write(tmp.path().join("AGENTS.md"), "agents doc").unwrap();
+    fs::write(tmp.path().join("CALICO.md"), "calico doc").unwrap();
+
+    let cfg = make_config(&tmp, /*limit*/ 4096, /*instructions*/ None).await;
+    let res = get_user_instructions(&cfg)
+        .await
+        .expect("instructions expected");
+    assert_eq!(res, "calico doc");
+}
+
 fn create_skill(codex_home: PathBuf, name: &str, description: &str) {
     let skill_dir = codex_home.join(format!("skills/{name}"));
     fs::create_dir_all(&skill_dir).unwrap();
