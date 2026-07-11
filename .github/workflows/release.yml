@@ -87,7 +87,7 @@ jobs:
           mkdir -p "$dist_dir"
           
           # Copy binaries to dist
-          cp "$release_dir/codex" "$dist_dir/" || true
+          cp "$release_dir/calicodex" "$dist_dir/" || true
           cp "$release_dir/codex-app-server" "$dist_dir/" || true
           cp "$release_dir/codex-code-mode-host" "$dist_dir/" || true
           cp "$release_dir/codex-responses-api-proxy" "$dist_dir/" || true

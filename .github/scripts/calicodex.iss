@@ -3,7 +3,7 @@ AppName=CalicoDex
 AppVersion={#AppVersion}
 DefaultDirName={autopf}\CalicoDex
 DefaultGroupName=CalicoDex
-UninstallDisplayIcon={app}\codex.exe
+UninstallDisplayIcon={app}\calicodex.exe
 Compression=lzma2
 SolidCompression=yes
 OutputDir={#OutputDir}
@@ -12,7 +12,7 @@ ChangesEnvironment=yes
 PrivilegesRequired=admin
 
 [Files]
-Source: "{#StageDir}\codex.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StageDir}\calicodex.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\codex-code-mode-host.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\codex-responses-api-proxy.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#StageDir}\codex-app-server.exe"; DestDir: "{app}"; Flags: ignoreversion
