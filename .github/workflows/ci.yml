@@ -67,6 +67,7 @@ jobs:
       - uses: ./.github/actions/setup-ci
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.95.0
           components: rustfmt, clippy
       - name: cargo fmt check
         run: cargo fmt -- --config imports_granularity=Item --check
@@ -88,6 +89,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup-ci
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-shear@1.11.2
@@ -136,6 +139,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
 
       - name: Install nextest
         uses: taiki-e/install-action@v2
