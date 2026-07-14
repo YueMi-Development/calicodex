@@ -44,7 +44,8 @@ runs:
             (cd "${binding_dir}" && shasum -a 256 -c "${checksums_path}")
           fi
 
-          echo "RUSTY_V8_ARCHIVE=${archive_path}" >> "${GITHUB_ENV}"
+          archive_path_win=$(cygpath -w "${archive_path}")
+          echo "RUSTY_V8_ARCHIVE=${archive_path_win}" >> "${GITHUB_ENV}"
         else
           base_url="https://github.com/openai/codex/releases/download/rusty-v8-v${version}"
           archive_name="librusty_v8_release_${TARGET}.a.gz"
