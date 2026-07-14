@@ -92,8 +92,8 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
-      - name: Install Zig (Linux compilation)
-        if: ${{ contains(matrix.target, 'linux') }}
+      - name: Install Zig (Linux cross-compile)
+        if: ${{ matrix.target == 'aarch64-unknown-linux-musl' }}
         uses: mlugg/setup-zig@v2
         with:
           version: 0.14.0
@@ -102,7 +102,16 @@ jobs:
         if: ${{ contains(matrix.target, 'linux') }}
         env:
           TARGET: ${{ matrix.target }}
-        run: bash "${GITHUB_WORKSPACE}/.github/scripts/install-musl-build-tools.sh"
+        run: |
+          bash "${GITHUB_WORKSPACE}/.github/scripts/install-musl-build-tools.sh"
+          if [[ "${TARGET}" == "x86_64-unknown-linux-musl" ]]; then
+            # musl-gcc on ubuntu-latest does not add the multiarch asm/ path.
+            # Kernel headers under /usr/include/linux/ do #include <asm/types.h>
+            # which resolves via /usr/include/asm/ — symlink from the gnu multiarch dir.
+            sudo ln -sfn /usr/include/x86_64-linux-gnu/asm /usr/include/asm
+            sudo ln -sfn /usr/include/x86_64-linux-gnu/bits /usr/include/bits
+            sudo ln -sfn /usr/include/x86_64-linux-gnu/sys /usr/include/sys
+          fi
 
       - name: Disable aws-lc jitter entropy (Linux musl)
         if: ${{ contains(matrix.target, 'musl') }}

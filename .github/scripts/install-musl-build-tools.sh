@@ -169,7 +169,7 @@ EOF
   chmod +x "${cc}" "${cxx}"
 
   sysroot="$("${zig_bin}" cc -target "${zig_target}" -print-sysroot 2>/dev/null || true)"
-  musl_linker="${cc}"
+  musl_linker="ld.lld"
 else
   # Use the musl toolchain as the Rust linker to avoid Zig injecting its own CRT.
   if command -v "${arch}-linux-musl-gcc" >/dev/null; then
