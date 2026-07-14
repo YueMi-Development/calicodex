@@ -16,13 +16,13 @@ runs:
         set -euo pipefail
 
         version="$(python3 "${GITHUB_WORKSPACE}/.github/scripts/rusty_v8_bazel.py" resolved-v8-crate-version)"
-        release_tag="rusty-v8-v${version}"
-        base_url="https://github.com/openai/codex/releases/download/${release_tag}"
         binding_dir="${RUNNER_TEMP}/rusty_v8"
 
         if [[ "${TARGET}" == *windows* ]]; then
+          base_url="https://github.com/denoland/rusty_v8/releases/download/v${version}"
           archive_name="rusty_v8_release_${TARGET}.lib.gz"
         else
+          base_url="https://github.com/openai/codex/releases/download/rusty-v8-v${version}"
           archive_name="librusty_v8_release_${TARGET}.a.gz"
         fi
 
