@@ -12,115 +12,205 @@ env:
   RUST_MIN_STACK: 8388608
 
 jobs:
-  build-and-release:
-    name: Build & Release - ${{ matrix.target }}
+  branch-check:
+    name: Validate branch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF_TYPE}" == "branch" ]] || { echo "❌ Not a branch ref"; exit 1; }
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta)(\.[0-9]+)?)?$ ]] \
+            || { echo "❌ Branch '${GITHUB_REF_NAME}' doesn't match expected format"; exit 1; }
+          
+          branch_ver="${GITHUB_REF_NAME#v}"
+          cargo_ver="$(grep -E '^version *= *"[^"]+"' codex-rs/Cargo.toml | head -n1 | sed -E 's/version *= *"([^"]+)".*/\1/' || echo "0.0.0")"
+          if [[ "${branch_ver}" != "${cargo_ver}" ]]; then
+            echo "::warning::Branch version ${branch_ver} does not match Cargo.toml version ${cargo_ver}"
+          else
+            echo "✅ Branch and Cargo.toml agree (${branch_ver})"
+          fi
+
+  build:
+    needs: branch-check
+    name: Build - ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: codex-rs
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
+            binaries: "calicodex codex-app-server codex-code-mode-host codex-responses-api-proxy bwrap"
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
+            binaries: "calicodex codex-app-server codex-code-mode-host codex-responses-api-proxy bwrap"
           - os: macos-latest
             target: x86_64-apple-darwin
+            binaries: "calicodex codex-app-server codex-code-mode-host codex-responses-api-proxy"
           - os: macos-latest
             target: aarch64-apple-darwin
+            binaries: "calicodex codex-app-server codex-code-mode-host codex-responses-api-proxy"
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            binaries: "calicodex codex-app-server codex-code-mode-host codex-responses-api-proxy codex-windows-sandbox-setup codex-command-runner"
           - os: windows-latest
             target: aarch64-pc-windows-msvc
+            binaries: "calicodex codex-app-server codex-code-mode-host codex-responses-api-proxy codex-windows-sandbox-setup codex-command-runner"
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-ci
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends binutils pkg-config libcap-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools pkg-config libcap-dev build-essential
-
-      - name: Install Zig (Linux cross-compile)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.14.0
-
-      - name: Setup musl build tools (Linux cross-compile)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        env:
-          TARGET: ${{ matrix.target }}
-        run: bash .github/scripts/install-musl-build-tools.sh
-
-      - name: Configure LLVM linker (Windows)
-        if: runner.os == 'Windows'
+      - name: Configure MSVC dev environment (Windows aarch64)
+        if: ${{ runner.os == 'Windows' && matrix.target == 'aarch64-pc-windows-msvc' }}
         uses: ./.github/actions/setup-msvc-env
         with:
           target: ${{ matrix.target }}
 
-      - name: Build (Windows/macOS/Linux)
+      - name: Install Zig (Linux cross-compile)
+        if: ${{ matrix.target == 'aarch64-unknown-linux-musl' }}
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.14.0
+
+      - name: Install musl build tools (Linux)
+        if: ${{ contains(matrix.target, 'linux') }}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: bash "${GITHUB_WORKSPACE}/.github/scripts/install-musl-build-tools.sh"
+
+      - name: Disable aws-lc jitter entropy (Linux musl)
+        if: ${{ contains(matrix.target, 'musl') }}
         shell: bash
-        working-directory: codex-rs
+        run: |
+          echo "AWS_LC_SYS_NO_JITTER_ENTROPY=1" >> "$GITHUB_ENV"
+          target_no_jitter="AWS_LC_SYS_NO_JITTER_ENTROPY_${{ matrix.target }}"
+          target_no_jitter="${target_no_jitter//-/_}"
+          echo "${target_no_jitter}=1" >> "$GITHUB_ENV"
+
+      - name: Configure rusty-v8 prebuilts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Build bwrap (Linux only)
+        if: ${{ contains(matrix.target, 'linux') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="${{ matrix.target }}"
+          cargo build --target "$target" --release --bin bwrap
+          
+          bwrap_path="target/${target}/release/bwrap"
+          if [[ -f "$bwrap_path" ]]; then
+            if command -v llvm-strip >/dev/null; then
+              llvm-strip "$bwrap_path"
+            else
+              strip "$bwrap_path"
+            fi
+            digest="$(sha256sum "$bwrap_path" | awk '{print $1}')"
+            echo "CODEX_BWRAP_SHA256=${digest}" >> "$GITHUB_ENV"
+            echo "Built bwrap ${bwrap_path} with sha256:${digest}"
+          fi
+
+      - name: Build target binaries
+        shell: bash
         run: |
           target="${{ matrix.target }}"
           if [[ "$target" == "x86_64-pc-windows-msvc" ]]; then
             export LIBSQLITE3_FLAGS=SQLITE_DISABLE_INTRINSIC
           fi
-          # Build all workspace binaries
-          cargo build --target "$target" --release
+          
+          build_args=()
+          for binary in ${{ matrix.binaries }}; do
+            if [[ "$binary" == "bwrap" ]]; then
+              continue
+            fi
+            build_args+=(--bin "$binary")
+          done
+          
+          cargo build --target "$target" --release "${build_args[@]}"
 
-      - name: Package Release (Non-Windows)
-        if: runner.os != 'Windows'
+      - name: Package release binaries
         shell: bash
         run: |
           target="${{ matrix.target }}"
           version="${{ github.ref_name }}"
-          release_dir="codex-rs/target/${target}/release"
-          dist_dir="dist/${target}"
+          release_dir="target/${target}/release"
+          dist_dir="../dist/${target}"
           mkdir -p "$dist_dir"
-          
-          # Copy binaries to dist
-          cp "$release_dir/calicodex" "$dist_dir/" || true
-          cp "$release_dir/codex-app-server" "$dist_dir/" || true
-          cp "$release_dir/codex-code-mode-host" "$dist_dir/" || true
-          cp "$release_dir/codex-responses-api-proxy" "$dist_dir/" || true
-          cp "$release_dir/bwrap" "$dist_dir/" || true
-          
+
+          exe_suffix=""
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            exe_suffix=".exe"
+          fi
+
+          for bin in ${{ matrix.binaries }}; do
+            bin_file="${bin}${exe_suffix}"
+            cp "${release_dir}/${bin_file}" "$dist_dir/" || true
+          done
+
           # Compress to tar.gz with version in name
-          tar -czf "calicodex-${version}-${target}.tar.gz" -C "$dist_dir" .
+          tar -czf "../calicodex-${version}-${target}.tar.gz" -C "$dist_dir" .
 
-      - name: Build Windows Installer (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $target = "${{ matrix.target }}"
-          $version = "${{ github.ref_name }}"
-          $stageDir = "codex-rs\target\${target}\release"
-          $distDir = "dist\${target}"
-          New-Item -ItemType Directory -Force -Path $distDir
-          
-          # Run Inno Setup Compiler with version in the output file name
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
-            /DAppVersion="$version" `
-            /DStageDir="$stageDir" `
-            /DOutputDir="$distDir" `
-            /DOutputBaseFilename="calicodex-setup-$version-$target" `
-            .github\scripts\calicodex.iss
+      - name: Upload packaged binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: calicodex-*.tar.gz
+          if-no-files-found: error
 
-      - name: Upload to Release
+  publish:
+    needs: [branch-check, build]
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download target artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: release-*
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -R release-artifacts/
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
-          files: |
-            calicodex-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
-            dist/${{ matrix.target }}/calicodex-setup-${{ github.ref_name }}-${{ matrix.target }}.exe
-          fail_on_unmatched_files: false
+          files: release-artifacts/calicodex-*.tar.gz
+          overwrite_files: true
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
