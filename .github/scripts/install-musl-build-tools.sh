@@ -238,15 +238,6 @@ exec "${zig_bin}" c++ -target "${zig_target}" "\${args[@]}" -fno-sanitize=undefi
 EOF
   chmod +x "${cc}" "${cxx}"
 
-  # A separate linker wrapper used exclusively by Cargo (CARGO_TARGET_*_LINKER).
-  # Unlike zigcc, it passes -nostdlib so Zig does NOT inject its own musl CRT.
-  # Rust's self-contained mode already provides crt1/crti/etc. as explicit
-  # positional args; having Zig add them again causes duplicate-symbol errors.
-  rust_linker="${tool_root}/rust-linker"
-  printf '#!/usr/bin/env bash\nset -euo pipefail\nexec "%s" cc -target "%s" -nostdlib -fno-sanitize=undefined "${@}"\n' \
-    "${zig_bin}" "${zig_target}" > "${rust_linker}"
-  chmod +x "${rust_linker}"
-
   sysroot="$("${zig_bin}" cc -target "${zig_target}" -print-sysroot 2>/dev/null || true)"
 else
   cc="${musl_linker}"
@@ -290,13 +281,20 @@ echo "${target_cxx_var}=${cxx}" >> "$GITHUB_ENV"
 
 cargo_linker_var="CARGO_TARGET_${TARGET^^}_LINKER"
 cargo_linker_var="${cargo_linker_var//-/_}"
-# When Zig is available, point Cargo at the dedicated rust-linker wrapper
-# (not zigcc). rust-linker uses -nostdlib so Zig won't inject its own musl
-# CRT; Rust's self-contained mode already passes crt1/crti/etc. as explicit
-# positional args, and having Zig inject them too causes duplicate _start.
-if command -v zig >/dev/null; then
+if [[ "${arch}" == "aarch64" ]]; then
+  # aarch64 needs a cross-linker. We use clang+lld rather than zig cc because
+  # zig cc 0.14 unconditionally injects its own bundled musl CRT for
+  # *-linux-musl targets (ignoring -nostdlib), causing duplicate _start errors
+  # when Rust's self-contained mode also provides crt1/crti/etc. explicitly.
+  # clang with -nostdlib and -fuse-ld=lld reliably suppresses CRT injection.
+  # Both clang and lld are already installed in the build-linux job.
+  rust_linker="${tool_root}/rust-linker"
+  printf '#!/usr/bin/env bash\nset -euo pipefail\nexec clang --target="%s" -fuse-ld=lld -nostdlib "${@}"\n' \
+    "${zig_target}" > "${rust_linker}"
+  chmod +x "${rust_linker}"
   echo "${cargo_linker_var}=${rust_linker}" >> "$GITHUB_ENV"
 else
+  # x86_64: the host musl-gcc is the native linker; no cross-linker needed.
   echo "${cargo_linker_var}=${musl_linker}" >> "$GITHUB_ENV"
 fi
 
