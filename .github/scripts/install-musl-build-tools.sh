@@ -268,12 +268,21 @@ fi
 
 echo "CFLAGS=${cflags}" >> "$GITHUB_ENV"
 echo "CXXFLAGS=${cxxflags}" >> "$GITHUB_ENV"
-echo "CC=${cc}" >> "$GITHUB_ENV"
+# Do NOT export global CC/CXX to the cross-compiler for aarch64 builds.
+# Proc-macro crates are compiled for the host (x86_64); their C dependencies
+# look up the global CC env var. If CC points to a cross-compiler targeting
+# aarch64, those C objects are aarch64 ELF and fail to link into the x86_64
+# host binary ("incompatible with elf64-x86-64").
+# The target-specific CC_${TARGET} / CXX_${TARGET} vars are sufficient for
+# Cargo to pick the correct cross-compiler for target compilation.
+if [[ "${arch}" == "x86_64" ]]; then
+  echo "CC=${cc}" >> "$GITHUB_ENV"
+  echo "CXX=${cxx}" >> "$GITHUB_ENV"
+fi
 echo "TARGET_CC=${cc}" >> "$GITHUB_ENV"
 target_cc_var="CC_${TARGET}"
 target_cc_var="${target_cc_var//-/_}"
 echo "${target_cc_var}=${cc}" >> "$GITHUB_ENV"
-echo "CXX=${cxx}" >> "$GITHUB_ENV"
 echo "TARGET_CXX=${cxx}" >> "$GITHUB_ENV"
 target_cxx_var="CXX_${TARGET}"
 target_cxx_var="${target_cxx_var//-/_}"
