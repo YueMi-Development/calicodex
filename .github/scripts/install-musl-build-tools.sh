@@ -66,8 +66,22 @@ if [[ ! -f "${libcap_prefix}/lib/libcap.a" ]]; then
 
   tar -xJf "${libcap_tarball}" -C "${libcap_src_root}"
   libcap_source_dir="${libcap_src_root}/libcap-${libcap_version}"
+
+  # When Zig is available, compile libcap for the correct target arch.
+  # musl_linker is the host x86_64 musl-gcc and would produce wrong-arch
+  # objects for an aarch64 cross-build.
+  if command -v zig >/dev/null; then
+    _libcap_cc="${tool_root}/libcap-cc"
+    _zig_bin_early="$(command -v zig)"
+    printf '#!/usr/bin/env bash\nset -euo pipefail\nexec "%s" cc -target "%s" -fno-sanitize=undefined "${@}"\n' \
+      "${_zig_bin_early}" "${zig_target}" > "${_libcap_cc}"
+    chmod +x "${_libcap_cc}"
+  else
+    _libcap_cc="${musl_linker}"
+  fi
+
   make -C "${libcap_source_dir}/libcap" -j"$(nproc)" \
-    CC="${musl_linker}" \
+    CC="${_libcap_cc}" \
     AR=ar \
     RANLIB=ranlib
 
@@ -215,6 +229,15 @@ exec "${zig_bin}" c++ -target "${zig_target}" "\${args[@]}" -fno-sanitize=undefi
 EOF
   chmod +x "${cc}" "${cxx}"
 
+  # A separate linker wrapper used exclusively by Cargo (CARGO_TARGET_*_LINKER).
+  # Unlike zigcc, it passes -nostdlib so Zig does NOT inject its own musl CRT.
+  # Rust's self-contained mode already provides crt1/crti/etc. as explicit
+  # positional args; having Zig add them again causes duplicate-symbol errors.
+  rust_linker="${tool_root}/rust-linker"
+  printf '#!/usr/bin/env bash\nset -euo pipefail\nexec "%s" cc -target "%s" -nostdlib -fno-sanitize=undefined "${@}"\n' \
+    "${zig_bin}" "${zig_target}" > "${rust_linker}"
+  chmod +x "${rust_linker}"
+
   sysroot="$("${zig_bin}" cc -target "${zig_target}" -print-sysroot 2>/dev/null || true)"
 else
   cc="${musl_linker}"
@@ -258,11 +281,12 @@ echo "${target_cxx_var}=${cxx}" >> "$GITHUB_ENV"
 
 cargo_linker_var="CARGO_TARGET_${TARGET^^}_LINKER"
 cargo_linker_var="${cargo_linker_var//-/_}"
-# When Zig is available, use the zigcc wrapper as the Rust linker so that
-# cross-targets (e.g. aarch64) are linked with the correct target triple.
-# The host musl-gcc is x86_64-only and cannot link aarch64 object files.
+# When Zig is available, point Cargo at the dedicated rust-linker wrapper
+# (not zigcc). rust-linker uses -nostdlib so Zig won't inject its own musl
+# CRT; Rust's self-contained mode already passes crt1/crti/etc. as explicit
+# positional args, and having Zig inject them too causes duplicate _start.
 if command -v zig >/dev/null; then
-  echo "${cargo_linker_var}=${cc}" >> "$GITHUB_ENV"
+  echo "${cargo_linker_var}=${rust_linker}" >> "$GITHUB_ENV"
 else
   echo "${cargo_linker_var}=${musl_linker}" >> "$GITHUB_ENV"
 fi
