@@ -67,23 +67,32 @@ if [[ ! -f "${libcap_prefix}/lib/libcap.a" ]]; then
   tar -xJf "${libcap_tarball}" -C "${libcap_src_root}"
   libcap_source_dir="${libcap_src_root}/libcap-${libcap_version}"
 
-  # When Zig is available, compile libcap for the correct target arch.
-  # musl_linker is the host x86_64 musl-gcc and would produce wrong-arch
-  # objects for an aarch64 cross-build.
-  if command -v zig >/dev/null; then
-    _libcap_cc="${tool_root}/libcap-cc"
+  if [[ "${arch}" == "aarch64" ]] && command -v zig >/dev/null; then
+    # aarch64 cross-build: libcap's Makefile compiles a host utility
+    # (_makenames) with the same CC as the target objects. Cross-compiling it
+    # produces an aarch64 binary that cannot execute on the x86_64 CI host
+    # ("Exec format error"). Fix with a two-phase build:
+    #
+    # Phase 1 – Use the host compiler to build _makenames and generate
+    #   cap_names.h.  The host musl-gcc is x86_64, so _makenames runs fine.
+    make -C "${libcap_source_dir}/libcap" cap_names.h CC="${musl_linker}"
+    #
+    # Phase 2 – Compile the target objects and archive them.  cap_names.h
+    #   already exists so make skips the _makenames step, and we only build
+    #   libcap.a (not the shared lib, which zig cc can't build with -shared).
     _zig_bin_early="$(command -v zig)"
+    _libcap_cross_cc="${tool_root}/libcap-cc"
     printf '#!/usr/bin/env bash\nset -euo pipefail\nexec "%s" cc -target "%s" -fno-sanitize=undefined "${@}"\n' \
-      "${_zig_bin_early}" "${zig_target}" > "${_libcap_cc}"
-    chmod +x "${_libcap_cc}"
+      "${_zig_bin_early}" "${zig_target}" > "${_libcap_cross_cc}"
+    chmod +x "${_libcap_cross_cc}"
+    make -C "${libcap_source_dir}/libcap" libcap.a \
+      CC="${_libcap_cross_cc}" AR=ar RANLIB=ranlib
   else
-    _libcap_cc="${musl_linker}"
+    # x86_64 (native build): host musl-gcc produces correct-arch objects and
+    # supports all Makefile targets including the shared-lib build.
+    make -C "${libcap_source_dir}/libcap" -j"$(nproc)" \
+      CC="${musl_linker}" AR=ar RANLIB=ranlib
   fi
-
-  make -C "${libcap_source_dir}/libcap" -j"$(nproc)" \
-    CC="${_libcap_cc}" \
-    AR=ar \
-    RANLIB=ranlib
 
   cp "${libcap_source_dir}/libcap/libcap.a" "${libcap_prefix}/lib/libcap.a"
   cp "${libcap_source_dir}/libcap/include/uapi/linux/capability.h" "${libcap_prefix}/include/linux/capability.h"
