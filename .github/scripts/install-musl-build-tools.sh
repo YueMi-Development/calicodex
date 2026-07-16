@@ -258,7 +258,14 @@ echo "${target_cxx_var}=${cxx}" >> "$GITHUB_ENV"
 
 cargo_linker_var="CARGO_TARGET_${TARGET^^}_LINKER"
 cargo_linker_var="${cargo_linker_var//-/_}"
-echo "${cargo_linker_var}=${musl_linker}" >> "$GITHUB_ENV"
+# When Zig is available, use the zigcc wrapper as the Rust linker so that
+# cross-targets (e.g. aarch64) are linked with the correct target triple.
+# The host musl-gcc is x86_64-only and cannot link aarch64 object files.
+if command -v zig >/dev/null; then
+  echo "${cargo_linker_var}=${cc}" >> "$GITHUB_ENV"
+else
+  echo "${cargo_linker_var}=${musl_linker}" >> "$GITHUB_ENV"
+fi
 
 echo "CMAKE_C_COMPILER=${cc}" >> "$GITHUB_ENV"
 echo "CMAKE_CXX_COMPILER=${cxx}" >> "$GITHUB_ENV"
